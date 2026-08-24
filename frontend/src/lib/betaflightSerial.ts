@@ -25,42 +25,75 @@ function looksLikeBetaflightDump(text: string): boolean {
   return /#\s*Betaflight\s*\//i.test(text)
 }
 
-/**
- * Reads from `reader` until no new data has arrived for `idleMs`, or
- * `timeoutMs` total has elapsed. Betaflight's CLI has no explicit
- * end-of-response marker, so idle-based capture is the practical option.
- */
 type ReadOutcome =
   | { timedOut: false; value: string | undefined; done: boolean }
   | { timedOut: true }
 
-async function readUntilIdle(
-  reader: ReadableStreamDefaultReader<string>,
-  idleMs: number,
-  timeoutMs: number
-): Promise<string> {
-  let buffer = ''
-  const deadline = Date.now() + timeoutMs
+/**
+ * Wraps a reader so idle-based capture never drops data. A naive
+ * `Promise.race(reader.read(), timeout)` loses whatever chunk arrives after
+ * the timeout wins a race, because the losing `read()` call is abandoned but
+ * NOT cancelled — it stays queued on the reader and resolves later with real
+ * data that nothing is listening for anymore. This keeps a single in-flight
+ * `read()` alive across timeouts (and across separate `readUntilIdle` calls)
+ * so no chunk is ever silently discarded.
+ */
+class IdleReader {
+  private reader: ReadableStreamDefaultReader<string>
+  private pending: Promise<ReadableStreamReadResult<string>> | null = null
 
-  while (Date.now() < deadline) {
-    const remaining = deadline - Date.now()
-    const waitMs = Math.min(idleMs, Math.max(remaining, 0))
-
-    const outcome: ReadOutcome = await Promise.race([
-      reader.read().then(({ value, done }): ReadOutcome => ({ timedOut: false, value, done })),
-      sleep(waitMs).then((): ReadOutcome => ({ timedOut: true })),
-    ])
-
-    if (outcome.timedOut) {
-      if (buffer.length > 0) break
-      continue
-    }
-
-    if (outcome.done) break
-    if (outcome.value) buffer += outcome.value
+  constructor(reader: ReadableStreamDefaultReader<string>) {
+    this.reader = reader
   }
 
-  return buffer
+  private nextChunk(): Promise<ReadableStreamReadResult<string>> {
+    if (!this.pending) {
+      this.pending = this.reader.read()
+    }
+    return this.pending
+  }
+
+  /**
+   * Reads until no new data has arrived for `idleMs`, or `timeoutMs` total
+   * has elapsed. Betaflight's CLI has no explicit end-of-response marker,
+   * so idle-based capture is the practical option.
+   */
+  async readUntilIdle(idleMs: number, timeoutMs: number): Promise<string> {
+    let buffer = ''
+    const deadline = Date.now() + timeoutMs
+
+    while (Date.now() < deadline) {
+      const remaining = deadline - Date.now()
+      const waitMs = Math.min(idleMs, Math.max(remaining, 0))
+
+      const outcome: ReadOutcome = await Promise.race([
+        this.nextChunk().then(({ value, done }): ReadOutcome => ({ timedOut: false, value, done })),
+        sleep(waitMs).then((): ReadOutcome => ({ timedOut: true })),
+      ])
+
+      if (outcome.timedOut) {
+        if (buffer.length > 0) break
+        continue
+      }
+
+      // This read has resolved for real: clear it so the next iteration (or
+      // the next readUntilIdle call) starts a fresh one instead of re-racing
+      // an already-consumed promise.
+      this.pending = null
+      if (outcome.done) break
+      if (outcome.value) buffer += outcome.value
+    }
+
+    return buffer
+  }
+
+  async cancel(): Promise<void> {
+    await this.reader.cancel().catch(() => {})
+  }
+
+  releaseLock(): void {
+    this.reader.releaseLock()
+  }
 }
 
 export async function readBetaflightConfig(
@@ -90,14 +123,16 @@ export async function readBetaflightConfig(
 
   const textDecoder = new TextDecoderStream()
   const readableClosed = port.readable.pipeTo(textDecoder.writable as WritableStream<Uint8Array>)
-  const reader = textDecoder.readable.getReader()
+  const idleReader = new IdleReader(textDecoder.readable.getReader())
 
   try {
     onStatus?.('Entering CLI mode…')
     await writer.write('#\n')
     await sleep(CLI_ENTER_DELAY_MS)
     // Drain the CLI banner/prompt so it doesn't get mixed into the dump.
-    await readUntilIdle(reader, BANNER_IDLE_MS, BANNER_TIMEOUT_MS)
+    // Any data that arrives right after this call's idle timeout naturally
+    // carries over to the next readUntilIdle call via the shared IdleReader.
+    await idleReader.readUntilIdle(BANNER_IDLE_MS, BANNER_TIMEOUT_MS)
 
     let dump = ''
     for (let attempt = 1; attempt <= MAX_DIFF_ALL_ATTEMPTS; attempt++) {
@@ -107,7 +142,7 @@ export async function readBetaflightConfig(
           : `Reading configuration (diff all)… retry ${attempt - 1}`
       )
       await writer.write('diff all\n')
-      dump = await readUntilIdle(reader, DUMP_IDLE_MS, DUMP_TIMEOUT_MS)
+      dump = await idleReader.readUntilIdle(DUMP_IDLE_MS, DUMP_TIMEOUT_MS)
       if (looksLikeBetaflightDump(dump)) break
       // The response may have landed while the CLI was still printing its
       // entry banner, corrupting the command. Give it a moment to settle
@@ -130,8 +165,8 @@ export async function readBetaflightConfig(
 
     return dump
   } finally {
-    await reader.cancel().catch(() => {})
-    reader.releaseLock()
+    await idleReader.cancel()
+    idleReader.releaseLock()
     await readableClosed.catch(() => {})
 
     await writer.close().catch(() => {})
