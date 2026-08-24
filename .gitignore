@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Local database
+*.db
+*.db-journal
+
+# Secrets / local config
+backend/.env
+
+# Uploaded config files (runtime data)
+configs/
+
+# Frontend build output and deps
+frontend/node_modules/
+frontend/dist/
+
+# Claude Code memory (local only)
+memory/
+
+# OS
+.DS_Store

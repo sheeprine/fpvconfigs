@@ -1,0 +1,171 @@
+
+# version
+# Betaflight / STM32H743 (H743) 2026.6.1 Aug  3 2026 / 08:48:14 (6dbc4218f) MSP API: 1.48
+# config rev: 749fff1
+
+# start the command batch
+batch start
+
+# reset configuration to default settings
+defaults nosave
+
+board_name MATEKH743
+manufacturer_id MTKS
+mcu_id 0023003b3230510131303832
+signature 
+
+# name: ERA5
+
+# feature
+feature TELEMETRY
+feature OSD
+feature ESC_SENSOR
+
+# serial
+serial UART4 8192 115200 57600 0 115200
+serial UART8 1024 115200 57600 0 115200
+
+# beacon
+beacon RX_SET
+
+# aux
+aux 0 0 0 1700 2100 0 0
+aux 1 1 1 1700 2100 0 0
+aux 2 2 1 1300 1700 0 0
+aux 3 27 2 900 1300 0 0
+aux 4 13 5 1700 2100 0 0
+aux 5 35 3 1700 2100 0 0
+aux 6 39 6 1950 2100 0 0
+
+# vtxtable
+vtxtable bands 5
+vtxtable channels 8
+vtxtable band 1 BAND_A   A CUSTOM  5865 5845 5825 5805 5785 5765 5745 5725
+vtxtable band 2 BAND_B   B CUSTOM  5733 5752 5771 5790 5999 5828 5847 5866
+vtxtable band 3 BAND_E   E CUSTOM  5705 5685 5665 5645 5885 5905 5925 5945
+vtxtable band 4 FATSHARK F CUSTOM  5740 5760 5780 5800 5820 5840 5860 5880
+vtxtable band 5 RACEBAND R CUSTOM  5658 5695 5732 5769 5806 5843 5880 5917
+vtxtable powerlevels 5
+vtxtable powervalues 25 100 250 800 1600
+vtxtable powerlabels 25 100 250 800 1W6
+
+# vtx
+vtx 0 6 0 0 1 900 1050
+vtx 1 6 0 0 2 1100 1250
+vtx 2 6 0 0 3 1300 1450
+vtx 3 6 0 0 4 1500 1650
+vtx 4 6 0 0 5 1700 1850
+
+# master
+set gyro_lpf1_static_hz = 0
+set gyro_lpf2_static_hz = 600
+set dyn_notch_count = 1
+set dyn_notch_q = 500
+set dyn_notch_min_hz = 150
+set dyn_notch_max_hz = 500
+set gyro_lpf1_dyn_min_hz = 0
+set gyro_lpf1_dyn_max_hz = 0
+set acc_calibration = 4,0,101,1
+set rc_smoothing_auto_factor = 50
+set rc_smoothing_auto_factor_throttle = 50
+set fpv_mix_degrees = 20
+set blackbox_sample_rate = 1/2
+set dshot_bidir = ON
+set motor_output_reordering = 3,2,1,0,4,5,6,7
+set yaw_motors_reversed = ON
+set small_angle = 180
+set simplified_gyro_filter_multiplier = 120
+set osd_rssi_dbm_alarm = -98
+set osd_link_quality_pos = 2049
+set osd_rssi_dbm_pos = 2072
+set osd_vtx_channel_pos = 2442
+set osd_current_pos = 2453
+set osd_mah_drawn_pos = 2434
+set osd_avg_cell_voltage_pos = 2401
+set osd_disarmed_pos = 2282
+set osd_flip_arrow_pos = 2414
+set osd_stat_bitmask = 1964
+set debug_mode = FFT_FREQ
+set vtx_band = 5
+set vtx_channel = 4
+set vtx_power = 1
+set vtx_freq = 5769
+set vcd_video_system = NTSC
+set rpm_filter_weights = 100,50,100
+set rpm_filter_min_hz = 150
+set craft_name = ERA5
+set pilot_name = UBR
+
+profile 0
+
+# profile 0
+set profile_name = ORCA
+set p_pitch = 53
+set i_pitch = 114
+set f_pitch = 142
+set p_roll = 53
+set i_roll = 115
+set f_roll = 143
+set p_yaw = 53
+set i_yaw = 115
+set f_yaw = 143
+set angle_limit = 30
+set d_max_roll = 30
+set d_max_pitch = 34
+set feedforward_jitter_factor = 8
+set dyn_idle_min_rpm = 30
+set simplified_master_multiplier = 120
+set simplified_i_gain = 120
+set simplified_d_gain = 85
+set simplified_d_max_gain = 0
+set simplified_pitch_pi_gain = 95
+
+profile 1
+
+profile 2
+
+profile 3
+
+# restore original profile selection
+profile 0
+
+rateprofile 0
+
+# rateprofile 0
+set rateprofile_name = STD
+set roll_rc_rate = 20
+set pitch_rc_rate = 20
+set yaw_rc_rate = 20
+set roll_expo = 75
+set pitch_expo = 75
+set yaw_expo = 75
+
+rateprofile 1
+
+# rateprofile 1
+set rateprofile_name = WOBL
+set roll_rc_rate = 15
+set pitch_rc_rate = 15
+set yaw_rc_rate = 15
+set roll_srate = 15
+set pitch_srate = 15
+set yaw_srate = 15
+
+rateprofile 2
+
+rateprofile 3
+
+battery_profile 0
+
+battery_profile 1
+
+battery_profile 2
+
+# restore original rateprofile selection
+rateprofile 0
+
+# restore original battery_profile selection
+battery_profile 0
+
+# save configuration
+save

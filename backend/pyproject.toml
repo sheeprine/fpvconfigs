@@ -1,0 +1,46 @@
+[project]
+name = "fpvconfigs-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.115.0",
+    "uvicorn[standard]==0.30.0",
+    "sqlalchemy[asyncio]==2.0.35",
+    "aiosqlite==0.20.0",
+    "alembic==1.13.3",
+    "pydantic[email]==2.9.2",
+    "pydantic-settings==2.5.2",
+    "python-jose[cryptography]==3.3.0",
+    "bcrypt==5.0.0",
+    "python-multipart==0.0.12",
+    "slowapi==0.1.9",
+    "aiofiles==24.1.0",
+    "python-dotenv==1.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.1.0",
+    "httpx==0.28.1",
+    "anyio==4.14.2",
+    "coverage==7.15.4",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=90"
+
+[tool.coverage.run]
+core = "sysmon"
+source = ["app"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@overload",
+]
