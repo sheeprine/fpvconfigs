@@ -48,6 +48,8 @@ set pilot_name = TESTPILOT
 save
 """
 
+EXAMPLE_CONFIG_V2 = EXAMPLE_CONFIG.replace("TESTCRAFT", "MODIFIEDCRAFT")
+
 
 # ---------------------------------------------------------------------------
 # Database fixtures

@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import { ConfigurationDetail } from '../api/types'
+import { isSerialSupported, readBetaflightConfig } from '../lib/betaflightSerial'
 
 interface ParsedPreview {
   betaflight_version: string | null
@@ -49,8 +50,10 @@ export default function UploadModal({ configId, onClose, onSuccess }: UploadModa
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [serialStatus, setSerialStatus] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
+  const serialSupported = isSerialSupported()
 
   const MAX_SIZE = 64 * 1024 // 64KB, matches backend Settings.max_upload_size
 
@@ -88,6 +91,23 @@ export default function UploadModal({ configId, onClose, onSuccess }: UploadModa
     },
     [handleFile]
   )
+
+  const handleConnectSerial = useCallback(async () => {
+    setError(null)
+    setSerialStatus('Connecting…')
+    try {
+      const dump = await readBetaflightConfig((status) => setSerialStatus(status))
+      const betaflightFile = new File([dump], 'betaflight-dump.txt', { type: 'text/plain' })
+      handleFile(betaflightFile)
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === 'NotFoundError')) {
+        // NotFoundError means the user closed the port picker without selecting a port.
+        setError(err instanceof Error ? err.message : 'Failed to read from serial port.')
+      }
+    } finally {
+      setSerialStatus(null)
+    }
+  }, [handleFile])
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -177,6 +197,46 @@ export default function UploadModal({ configId, onClose, onSuccess }: UploadModa
             </div>
           )}
         </div>
+
+        {/* Serial connect */}
+        <div className="flex items-center gap-3 mt-3">
+          <div className="flex-1 h-px bg-slate-700" />
+          <span className="text-xs text-slate-500 uppercase tracking-wide">or</span>
+          <div className="flex-1 h-px bg-slate-700" />
+        </div>
+        <button
+          type="button"
+          onClick={handleConnectSerial}
+          disabled={!serialSupported || serialStatus !== null || mutation.isPending}
+          title={
+            serialSupported
+              ? 'Read the configuration directly from a connected flight controller'
+              : 'Web Serial is not supported in this browser. Use Chrome or Edge.'
+          }
+          className="btn-secondary w-full mt-3 flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {serialStatus ? (
+            <>
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+              {serialStatus}
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v4a1 1 0 001 1h4M5 21h14a2 2 0 002-2V7a2 2 0 00-.586-1.414l-3-3A2 2 0 0016 2H5a2 2 0 00-2 2v15a2 2 0 002 2zm5-6h4" />
+              </svg>
+              Get from Betaflight (USB)
+            </>
+          )}
+        </button>
+        {!serialSupported && (
+          <p className="text-slate-500 text-xs mt-1.5 text-center">
+            Reading over USB requires Chrome or Edge.
+          </p>
+        )}
 
         {/* Preview */}
         {preview && (

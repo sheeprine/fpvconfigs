@@ -2,7 +2,13 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.conftest import EXAMPLE_CONFIG, auth_headers, make_user, upload_config
+from tests.conftest import (
+    EXAMPLE_CONFIG,
+    EXAMPLE_CONFIG_V2,
+    auth_headers,
+    make_user,
+    upload_config,
+)
 
 # A config that is NOT a valid betaflight file
 INVALID_CONFIG = "this is just plain text, not a betaflight config"
@@ -258,7 +264,7 @@ class TestAddRevision:
         resp = await client.post(
             f"/api/configurations/{data['id']}/revisions",
             headers=auth_headers(user.id),
-            files={"file": ("v2.txt", EXAMPLE_CONFIG.encode(), "text/plain")},
+            files={"file": ("v2.txt", EXAMPLE_CONFIG_V2.encode(), "text/plain")},
         )
         assert resp.status_code == 201
 
@@ -268,7 +274,7 @@ class TestAddRevision:
         resp = await client.post(
             f"/api/configurations/{data['id']}/revisions",
             headers=auth_headers(user.id),
-            files={"file": ("v2.txt", EXAMPLE_CONFIG.encode(), "text/plain")},
+            files={"file": ("v2.txt", EXAMPLE_CONFIG_V2.encode(), "text/plain")},
         )
         assert resp.json()["revision_number"] == 2
 
@@ -280,7 +286,7 @@ class TestAddRevision:
         await client.post(
             f"/api/configurations/{data['id']}/revisions",
             headers=auth_headers(user.id),
-            files={"file": ("v2.txt", EXAMPLE_CONFIG.encode(), "text/plain")},
+            files={"file": ("v2.txt", EXAMPLE_CONFIG_V2.encode(), "text/plain")},
         )
         detail = await client.get(
             f"/api/configurations/{data['id']}", headers=auth_headers(user.id)
@@ -317,6 +323,54 @@ class TestAddRevision:
         )
         assert resp.status_code == 401
 
+    async def test_duplicate_content_returns_400(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await make_user(db_session)
+        data = await upload_config(client, auth_headers(user.id))
+        resp = await client.post(
+            f"/api/configurations/{data['id']}/revisions",
+            headers=auth_headers(user.id),
+            files={"file": ("v2.txt", EXAMPLE_CONFIG.encode(), "text/plain")},
+        )
+        assert resp.status_code == 400
+        assert "No changes" in resp.json()["detail"]
+
+    async def test_duplicate_content_does_not_create_revision(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await make_user(db_session)
+        data = await upload_config(client, auth_headers(user.id))
+        await client.post(
+            f"/api/configurations/{data['id']}/revisions",
+            headers=auth_headers(user.id),
+            files={"file": ("v2.txt", EXAMPLE_CONFIG.encode(), "text/plain")},
+        )
+        detail = await client.get(
+            f"/api/configurations/{data['id']}", headers=auth_headers(user.id)
+        )
+        assert len(detail.json()["revisions"]) == 1
+
+    async def test_duplicate_only_checked_against_latest_revision(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await make_user(db_session)
+        data = await upload_config(client, auth_headers(user.id))
+        await client.post(
+            f"/api/configurations/{data['id']}/revisions",
+            headers=auth_headers(user.id),
+            files={"file": ("v2.txt", EXAMPLE_CONFIG_V2.encode(), "text/plain")},
+        )
+        # Re-uploading the original content is a real change relative to the
+        # latest (v2) revision, even though it matches revision 1.
+        resp = await client.post(
+            f"/api/configurations/{data['id']}/revisions",
+            headers=auth_headers(user.id),
+            files={"file": ("v3.txt", EXAMPLE_CONFIG.encode(), "text/plain")},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["revision_number"] == 3
+
 
 class TestDeleteRevision:
     async def _make_two_revisions(self, client, user_id):
@@ -326,7 +380,7 @@ class TestDeleteRevision:
         resp2 = await client.post(
             f"/api/configurations/{config_id}/revisions",
             headers=auth_headers(user_id),
-            files={"file": ("v2.txt", EXAMPLE_CONFIG.encode(), "text/plain")},
+            files={"file": ("v2.txt", EXAMPLE_CONFIG_V2.encode(), "text/plain")},
         )
         assert resp2.status_code == 201
         rev2_id = resp2.json()["id"]

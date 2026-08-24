@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.conftest import EXAMPLE_CONFIG, auth_headers, make_user, upload_config
+from tests.conftest import EXAMPLE_CONFIG_V2, auth_headers, make_user, upload_config
 
 
 # ---------------------------------------------------------------------------
@@ -448,7 +448,7 @@ class TestAdminDeleteRevision:
         resp2 = await client.post(
             f"/api/configurations/{config_id}/revisions",
             headers=auth_headers(user_id),
-            files={"file": ("v2.txt", EXAMPLE_CONFIG.encode(), "text/plain")},
+            files={"file": ("v2.txt", EXAMPLE_CONFIG_V2.encode(), "text/plain")},
         )
         assert resp2.status_code == 201
         rev2_id = resp2.json()["id"]

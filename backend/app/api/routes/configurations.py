@@ -280,6 +280,15 @@ async def add_revision(
     config = await _get_config_or_404(db, config_id, current_user.id)
     content, parsed = await _process_upload(file, settings.max_upload_size)
 
+    latest_revision = config.revisions[-1] if config.revisions else None
+    if latest_revision is not None:
+        existing_text = await load_revision(latest_revision.file_path)
+        if existing_text == content.decode("utf-8"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No changes since the latest revision",
+            )
+
     revision_id = uuid.uuid4()
     revision_number = await _get_next_revision_number(db, config_id)
 
