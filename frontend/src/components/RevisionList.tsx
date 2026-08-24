@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { RevisionInfo } from '../api/types'
 import api from '../api/client'
+import ConfirmModal from './ConfirmModal'
 
 interface RevisionListProps {
   configId: string
@@ -26,7 +28,19 @@ function formatBytes(bytes: number) {
 
 export default function RevisionList({ configId, revisions, onDownload }: RevisionListProps) {
   const [selected, setSelected] = useState<string[]>([])
+  const [revisionToDelete, setRevisionToDelete] = useState<RevisionInfo | null>(null)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  const deleteMutation = useMutation({
+    mutationFn: async (revisionId: string) => {
+      await api.delete(`/configurations/${configId}/revisions/${revisionId}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['configuration', configId] })
+      setRevisionToDelete(null)
+    },
+  })
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -133,15 +147,27 @@ export default function RevisionList({ configId, revisions, onDownload }: Revisi
                       {formatDate(rev.created_at)}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      <button
-                        onClick={() => handleDownload(rev)}
-                        className="text-slate-400 hover:text-orange-400 transition-colors"
-                        title="Download"
-                      >
-                        <svg className="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => handleDownload(rev)}
+                          className="text-slate-400 hover:text-orange-400 transition-colors"
+                          title="Download"
+                        >
+                          <svg className="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setRevisionToDelete(rev)}
+                          disabled={sorted.length <= 1}
+                          className="text-slate-400 hover:text-red-400 transition-colors disabled:opacity-30 disabled:hover:text-slate-400 disabled:cursor-not-allowed"
+                          title={sorted.length <= 1 ? 'Cannot delete the only revision' : 'Delete revision'}
+                        >
+                          <svg className="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -149,6 +175,18 @@ export default function RevisionList({ configId, revisions, onDownload }: Revisi
             </tbody>
           </table>
         </div>
+      )}
+
+      {revisionToDelete && (
+        <ConfirmModal
+          title="Delete Revision"
+          message={`Delete revision #${revisionToDelete.revision_number}? This cannot be undone.`}
+          confirmLabel="Delete"
+          isDanger
+          isLoading={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate(revisionToDelete.id)}
+          onCancel={() => setRevisionToDelete(null)}
+        />
       )}
     </div>
   )

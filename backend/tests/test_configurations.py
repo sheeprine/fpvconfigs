@@ -318,6 +318,100 @@ class TestAddRevision:
         assert resp.status_code == 401
 
 
+class TestDeleteRevision:
+    async def _make_two_revisions(self, client, user_id):
+        data = await upload_config(client, auth_headers(user_id))
+        config_id = data["id"]
+        rev1_id = data["revisions"][0]["id"]
+        resp2 = await client.post(
+            f"/api/configurations/{config_id}/revisions",
+            headers=auth_headers(user_id),
+            files={"file": ("v2.txt", EXAMPLE_CONFIG.encode(), "text/plain")},
+        )
+        assert resp2.status_code == 201
+        rev2_id = resp2.json()["id"]
+        return config_id, rev1_id, rev2_id
+
+    async def test_success_returns_204(self, client: AsyncClient, db_session: AsyncSession):
+        user = await make_user(db_session)
+        config_id, rev1_id, _ = await self._make_two_revisions(client, user.id)
+        resp = await client.delete(
+            f"/api/configurations/{config_id}/revisions/{rev1_id}",
+            headers=auth_headers(user.id),
+        )
+        assert resp.status_code == 204
+
+    async def test_deleted_revision_no_longer_listed(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await make_user(db_session)
+        config_id, rev1_id, rev2_id = await self._make_two_revisions(client, user.id)
+        await client.delete(
+            f"/api/configurations/{config_id}/revisions/{rev1_id}",
+            headers=auth_headers(user.id),
+        )
+        detail = await client.get(
+            f"/api/configurations/{config_id}", headers=auth_headers(user.id)
+        )
+        revision_ids = [r["id"] for r in detail.json()["revisions"]]
+        assert rev1_id not in revision_ids
+        assert rev2_id in revision_ids
+
+    async def test_only_revision_cannot_be_deleted(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await make_user(db_session)
+        data = await upload_config(client, auth_headers(user.id))
+        config_id = data["id"]
+        rev_id = data["revisions"][0]["id"]
+        resp = await client.delete(
+            f"/api/configurations/{config_id}/revisions/{rev_id}",
+            headers=auth_headers(user.id),
+        )
+        assert resp.status_code == 400
+
+    async def test_revision_not_found_returns_404(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await make_user(db_session)
+        config_id, _, _ = await self._make_two_revisions(client, user.id)
+        resp = await client.delete(
+            f"/api/configurations/{config_id}/revisions/00000000-0000-0000-0000-000000000000",
+            headers=auth_headers(user.id),
+        )
+        assert resp.status_code == 404
+
+    async def test_config_not_found_returns_404(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await make_user(db_session)
+        resp = await client.delete(
+            "/api/configurations/00000000-0000-0000-0000-000000000000/revisions/00000000-0000-0000-0000-000000000001",
+            headers=auth_headers(user.id),
+        )
+        assert resp.status_code == 404
+
+    async def test_other_users_config_returns_404(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        owner = await make_user(db_session, username="owner", email="o@e.com")
+        visitor = await make_user(db_session, username="visitor", email="v@e.com")
+        config_id, rev1_id, _ = await self._make_two_revisions(client, owner.id)
+        resp = await client.delete(
+            f"/api/configurations/{config_id}/revisions/{rev1_id}",
+            headers=auth_headers(visitor.id),
+        )
+        assert resp.status_code == 404
+
+    async def test_requires_auth(self, client: AsyncClient, db_session: AsyncSession):
+        user = await make_user(db_session)
+        config_id, rev1_id, _ = await self._make_two_revisions(client, user.id)
+        resp = await client.delete(
+            f"/api/configurations/{config_id}/revisions/{rev1_id}"
+        )
+        assert resp.status_code == 401
+
+
 class TestGetRevisionContent:
     async def test_success_returns_content(self, client: AsyncClient, db_session: AsyncSession):
         user = await make_user(db_session)

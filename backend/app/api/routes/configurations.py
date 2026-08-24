@@ -313,6 +313,43 @@ async def add_revision(
     return RevisionInfo.model_validate(revision)
 
 
+@router.delete(
+    "/{config_id}/revisions/{revision_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_config_revision(
+    config_id: str,
+    revision_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    # Verify ownership
+    await _get_config_or_404(db, config_id, current_user.id)
+
+    count_result = await db.execute(
+        select(func.count()).select_from(Revision).where(Revision.config_id == config_id)
+    )
+    if count_result.scalar_one() <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete the only revision of a configuration",
+        )
+
+    rev_result = await db.execute(
+        select(Revision).where(
+            Revision.id == revision_id, Revision.config_id == config_id
+        )
+    )
+    revision = rev_result.scalar_one_or_none()
+    if revision is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Revision not found")
+
+    file_path = revision.file_path
+    await db.delete(revision)
+    await db.flush()
+    await delete_revision(file_path)
+
+
 @router.get("/{config_id}/revisions/{revision_id}/content")
 async def get_revision_content(
     config_id: str,
