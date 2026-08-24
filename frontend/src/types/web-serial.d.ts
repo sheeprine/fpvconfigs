@@ -15,12 +15,19 @@ interface SerialOptions {
   flowControl?: 'none' | 'hardware'
 }
 
+interface SerialOutputSignals {
+  dataTerminalReady?: boolean
+  requestToSend?: boolean
+  break?: boolean
+}
+
 interface SerialPort extends EventTarget {
   readonly readable: ReadableStream<Uint8Array> | null
   readonly writable: WritableStream<Uint8Array> | null
   open(options: SerialOptions): Promise<void>
   close(): Promise<void>
   getInfo(): SerialPortInfo
+  setSignals(signals: SerialOutputSignals): Promise<void>
 }
 
 interface SerialPortFilter {

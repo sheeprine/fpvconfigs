@@ -13,9 +13,15 @@ interface ParsedPreview {
   config_revision: string | null
 }
 
+// Mirrors the backend's two-pattern fallback in app/core/betaflight.py: newer
+// firmware includes a parenthesized target ("/ STM32H743 (H743) 4.4.3 ..."),
+// older firmware omits it ("/ STM32H743 4.4.3 ...").
+const VERSION_HEADER_RE = /#\s+Betaflight\s*\/\s*\S+\s+\([^)]+\)\s+(\d+\.\d+(?:\.\d+)?)/i
+const VERSION_HEADER_ALT_RE = /#\s+Betaflight\s*\/\s*\S+\s+(\d+\.\d+(?:\.\d+)?)/i
+
 function parseConfigPreview(text: string): ParsedPreview | null {
   // Quick client-side parse for preview
-  const versionMatch = text.match(/# Betaflight \/ \S+ \([^)]+\)\s+(\d+\.\d+(?:\.\d+)?)/i)
+  const versionMatch = text.match(VERSION_HEADER_RE) ?? text.match(VERSION_HEADER_ALT_RE)
   const boardMatch = text.match(/^board_name\s+(\S+)/im)
   const mfrMatch = text.match(/^manufacturer_id\s+(\S+)/im)
   const craftMatch =

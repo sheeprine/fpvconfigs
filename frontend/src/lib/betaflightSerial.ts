@@ -2,11 +2,12 @@
 // connected over USB, via the Chromium-only Web Serial API.
 
 const BAUD_RATE = 115200
-const CLI_ENTER_DELAY_MS = 400
-const BANNER_IDLE_MS = 300
-const BANNER_TIMEOUT_MS = 2000
+const CLI_ENTER_DELAY_MS = 500
+const BANNER_IDLE_MS = 500
+const BANNER_TIMEOUT_MS = 3000
 const DUMP_IDLE_MS = 1200
 const DUMP_TIMEOUT_MS = 20000
+const MAX_DIFF_ALL_ATTEMPTS = 3
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -14,6 +15,14 @@ function sleep(ms: number): Promise<void> {
 
 export function isSerialSupported(): boolean {
   return typeof navigator !== 'undefined' && 'serial' in navigator && !!navigator.serial
+}
+
+// Loose check that a captured dump actually contains the Betaflight version
+// banner, used to decide whether a "diff all" attempt needs retrying (e.g.
+// because it landed while the CLI was still printing its entry banner and
+// got interleaved/corrupted).
+function looksLikeBetaflightDump(text: string): boolean {
+  return /#\s*Betaflight\s*\//i.test(text)
 }
 
 /**
@@ -66,6 +75,10 @@ export async function readBetaflightConfig(
   const port = await navigator.serial!.requestPort()
   await port.open({ baudRate: BAUD_RATE })
 
+  // Many flight controllers' USB-CDC implementations only start streaming
+  // once DTR is asserted (this is what Betaflight Configurator does too).
+  await port.setSignals({ dataTerminalReady: true, requestToSend: true }).catch(() => {})
+
   if (!port.readable || !port.writable) {
     await port.close()
     throw new Error('Serial port has no readable/writable stream.')
@@ -86,13 +99,32 @@ export async function readBetaflightConfig(
     // Drain the CLI banner/prompt so it doesn't get mixed into the dump.
     await readUntilIdle(reader, BANNER_IDLE_MS, BANNER_TIMEOUT_MS)
 
-    onStatus?.('Reading configuration (diff all)…')
-    await writer.write('diff all\n')
-    const dump = await readUntilIdle(reader, DUMP_IDLE_MS, DUMP_TIMEOUT_MS)
+    let dump = ''
+    for (let attempt = 1; attempt <= MAX_DIFF_ALL_ATTEMPTS; attempt++) {
+      onStatus?.(
+        attempt === 1
+          ? 'Reading configuration (diff all)…'
+          : `Reading configuration (diff all)… retry ${attempt - 1}`
+      )
+      await writer.write('diff all\n')
+      dump = await readUntilIdle(reader, DUMP_IDLE_MS, DUMP_TIMEOUT_MS)
+      if (looksLikeBetaflightDump(dump)) break
+      // The response may have landed while the CLI was still printing its
+      // entry banner, corrupting the command. Give it a moment to settle
+      // and try again rather than failing on the first noisy read.
+      await sleep(500)
+    }
 
     if (!dump.trim()) {
       throw new Error(
         'No data received from the flight controller. Check the connection and try again.'
+      )
+    }
+
+    if (!looksLikeBetaflightDump(dump)) {
+      const snippet = dump.trim().slice(0, 200)
+      throw new Error(
+        `Flight controller response did not look like a Betaflight CLI dump. Received: "${snippet}${dump.length > 200 ? '…' : ''}"`
       )
     }
 
