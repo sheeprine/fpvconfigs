@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import ConfigurationDetail from './pages/ConfigurationDetail'
+import RevisionView from './pages/RevisionView'
 import DiffView from './pages/DiffView'
 import AdminLayout from './pages/admin/AdminLayout'
 import UsersManagement from './pages/admin/UsersManagement'
@@ -94,6 +95,19 @@ export default function App() {
               <Navbar />
               <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <ConfigurationDetail />
+              </main>
+            </div>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/configurations/:configId/revisions/:revisionId"
+        element={
+          <RequireAuth>
+            <div className="min-h-screen bg-slate-900">
+              <Navbar />
+              <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <RevisionView />
               </main>
             </div>
           </RequireAuth>
